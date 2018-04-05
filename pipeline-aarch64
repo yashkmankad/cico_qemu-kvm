@@ -1,0 +1,273 @@
+#!/usr/bin/env groovy
+pipeline {
+  // agent defines where the pipeline will run.
+  agent {
+    // label of slave where job should be started
+    label "qemu-kvm"
+        }
+
+  environment {
+    GIT_URL = 'https://www.github.com/yashkmankad/'
+    SSH_OPTIONS = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+              }
+
+  stages {
+
+    stage("Provision a node using duffy") {
+      // every stage must have a steps block containing at least one step.
+      steps {
+        //
+        checkout(
+          [$class: 'GitSCM', branches: [[name: '*/master']],
+            extensions: [[$class: 'RelativeTargetDirectory',
+              relativeTargetDir: 'cico_qemu-kvm']],
+              userRemoteConfigs: [[url: "${GIT_URL}/cico_qemu-kvm"]]
+          ]
+        )
+        //
+        wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+            sh '''
+              # Clean-up RESOURCES file
+
+              rm -f $WORKSPACE/RESOURCES.txt
+              touch $WORKSPACE/RESOURCES.txt
+
+              # get node from duffy
+              export CICO_API_KEY=$(cat /home/qemu-kvm/duffy.key); cico node get --arch aarch64 --release 7 --count 1
+              CENTOS_NODE=$(cico inventory -c hostname -f value)
+              echo $CENTOS_NODE
+              SSID=$(cico inventory -c comment -f value)
+              echo $SSID
+              echo "SSID="$SSID >> $WORKSPACE/RESOURCES.txt
+              echo "CENTOS_NODE="$CENTOS_NODE >> $WORKSPACE/RESOURCES.txt
+            '''
+        }
+          sh '''
+          #!/bin/bash
+          source "$WORKSPACE/RESOURCES.txt"
+          echo "### Collecting parameters ###"
+          # get arch
+          MACHINE_ARCH=`ssh $SSH_OPTIONS \
+          root@$CENTOS_NODE "uname -m"`
+          echo $MACHINE_ARCH
+          echo "VT_GUEST_OS="$VT_GUEST_OS >> $WORKSPACE/RESOURCES.txt
+          echo "INSTALL_URL="$INSTALL_URL >> $WORKSPACE/RESOURCES.txt
+          echo "MACHINE_ARCH="$MACHINE_ARCH >> $WORKSPACE/RESOURCES.txt
+          echo "AVOCADO_VERSION="$AVOCADO_VERSION >> $WORKSPACE/RESOURCES.txt
+          '''
+      }
+      post {
+        // notify over email if failure during duffy provisioning
+        failure {
+          script {
+            emailFailNotification()
+          }
+        }
+      }
+    }
+
+    stage('Install QEMU') {
+      steps {
+            sh '''
+            #!/bin/bash
+            source "$WORKSPACE/RESOURCES.txt"
+            # Install all the QEMU dependencies and other packages
+            echo "### Installing all the QEMU dependencies ###"
+            ssh $SSH_OPTIONS \
+            root@$CENTOS_NODE "yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
+            ssh $SSH_OPTIONS \
+            root@$CENTOS_NODE "yum -y install wget curl python-pip PyYAML tcpdump python-requests \
+                              libvirt-python python-sphinx libvirt-devel gstreamer-python gdb gdb-gdbserver \
+                              python-imaging bridge-utils git python-devel cryptsetup gcc gcc-c++ libvirt* \
+                              p7zip python2-simplejson policycoreutils-python attr genisoimage mkisofs \
+                              glibc-devel glib2-devel sg3_utils hdparm net-tools automake autoconf pkgconfig \
+                              make SDL-devel libtool texinfo zlib zlib-devel openssl-devel ntpdate pixman \
+                              pixman-devel flex bison"
+            # Install latest QEMU from upstream
+            echo "### Installing QEMU from the upstream tree ###"
+            ssh $SSH_OPTIONS \
+            root@$CENTOS_NODE "git clone git://git.qemu-project.org/qemu.git && cd qemu && git submodule init && git submodule update --recursive && ./configure --target-list=arm-softmmu,aarch64-softmmu --disable-strip && make -j4 && make install"
+            '''
+            }
+          }
+
+    stage('Install Avocado') {
+      steps {
+            sh '''
+            #!/bin/bash
+            source "$WORKSPACE/RESOURCES.txt"
+            echo "### Installing Avocado packages ###"
+            # Install either a released version or from source.
+            if [ "${AVOCADO_VERSION}" != "master" ]; then
+              ssh $SSH_OPTIONS \
+              root@$CENTOS_NODE 'curl -s -o /etc/yum.repos.d/avocado-el.repo http://avocado-project.org/data/repos/avocado-el.repo'
+              ssh $SSH_OPTIONS \
+              root@$CENTOS_NODE "yum install -y --setopt=obsoletes=0 python-avocado-${AVOCADO_VERSION} avocado-plugins-vt-${AVOCADO_VERSION} python-avocado-plugins-loader-yaml-${AVOCADO_VERSION}"
+            else
+              ssh $SSH_OPTIONS root@$CENTOS_NODE "/root/resources/avocado/scripts/install_from_source.sh"
+            fi
+            '''
+        }
+    }
+
+    stage('Environment for Avocado-VT') {
+      steps {
+          sh '''
+          #!/bin/bash
+          source "$WORKSPACE/RESOURCES.txt"
+          cat $WORKSPACE/RESOURCES.txt
+          echo "### Bootstrapping Avocado-VT ###"
+          ssh $SSH_OPTIONS \
+          root@$CENTOS_NODE "avocado vt-bootstrap --vt-type qemu --yes-to-all"
+          ssh $SSH_OPTIONS \
+          root@$CENTOS_NODE "systemctl start libvirtd"
+          (echo "Hostname: $CENTOS_NODE";echo "Arch: $MACHINE_ARCH";echo "Avocado Version: $AVOCADO_VERSION") | tee -a "$WORKSPACE/package_info.log"
+          ssh $SSH_OPTIONS \
+          root@$CENTOS_NODE 'echo "Release: $(cat /etc/redhat-release)";echo "Packages Tested:";rpm -qa | egrep "^(libvirt|qemu-kvm|qemu-kvm-rhev|seabios-bin|vgabios-bin|ipxe-roms-qemu|kernel)-[0-9]"' | tee -a "$WORKSPACE/package_info.log"
+          '''
+      }
+    }
+
+    stage('Unattended install by Avocado-VT') {
+      steps {
+          wrap([$class: 'TimestamperBuildWrapper']) {
+            sh '''
+            #!/bin/bash
+            source "$WORKSPACE/RESOURCES.txt"
+            echo "### Installing Avocado unattended_install ###"
+            ssh $SSH_OPTIONS \
+            root@$CENTOS_NODE "avocado run unattended_install.url.extra_cdrom_ks.default_install.aio_native --vt-type qemu --vt-guest-os $VT_GUEST_OS --vt-machine-type $VT_MACHINE_TYPE --vt-extra-params 'url = $INSTALL_URL' --show-job-log"
+            '''
+          }
+      }
+
+      post {
+        // archive everything related to avocado run and notify over email if "Unattended install" failed
+        failure {
+          script {
+            archiveAvocadoResults()
+            emailNotification()
+          }
+        }
+      }
+    }
+
+    stage('Runtest by Avocado-VT') {
+      steps {
+          wrap([$class: 'TimestamperBuildWrapper']) {
+
+            wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+              sh '''
+              #!/bin/bash
+              source "$WORKSPACE/RESOURCES.txt"
+              # Holds the list of flags to be passed to avocado run.
+              flags="--vt-type qemu --vt-guest-os $VT_GUEST_OS --vt-machine-type $VT_MACHINE_TYPE"
+              # Run tests
+              echo "### Running Avocado tests ###"
+              ssh $SSH_OPTIONS \
+              root@$CENTOS_NODE "avocado run $flags $(echo $AVOCADO_TESTCASES)" | tee "$WORKSPACE/report.log" || exit 1
+              '''
+            }
+          }
+      }
+
+      post {
+        // archive everything related to avocado run and notify over email
+        always {
+          script {
+            archiveAvocadoResults()
+            emailNotification()
+          }
+        }
+      }
+  }
+
+}
+
+  // global post action step
+  post {
+    always {
+      script {
+        returnduffyMachine()
+      }
+    }
+  }
+
+
+}
+
+def returnduffyMachine() {
+
+    wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+
+      sh '''
+        #!/bin/bash
+
+        source "$WORKSPACE/RESOURCES.txt"
+
+        export CICO_API_KEY=$(cat /home/qemu-kvm/duffy.key); cico node done $SSID
+         '''
+    }
+}
+
+def archiveAvocadoResults() {
+   // Copy files from Beaker machine over the workspace.
+    wrap([$class: 'TimestamperBuildWrapper']) {
+      sh '''
+        source "$WORKSPACE/RESOURCES.txt"
+        # Copy avocado results.xml to workspace (preserving folders layout),
+        # they are later used to publish test results in Jenkins.
+        files=`ssh $SSH_OPTIONS root@$CENTOS_NODE find /root/avocado/job-results/job-* -type f -name "results.xml"`
+        for file in $files; do
+            echo "Saving avocado results file: $file"
+            target_dir=$WORKSPACE/avocado/job-results/$(basename $file)
+            mkdir -p $target_dir
+            scp $SSH_OPTIONS -C root@$CENTOS_NODE:$file $target_dir/
+        done
+        ssh $SSH_OPTIONS \
+        root@$CENTOS_NODE "tar -zcf $JOB_NAME-$BUILD_NUMBER-avocado-job-results.tar.gz avocado/job-results/*"
+        scp $SSH_OPTIONS \
+        -C root@$CENTOS_NODE:/root/$JOB_NAME-$BUILD_NUMBER-avocado-job-results.tar.gz $WORKSPACE/
+      '''
+    }
+   // Archive Avocado's job results folder.
+  archiveArtifacts artifacts: '**/*.tar.gz', fingerprint: true, allowEmptyArchive: true
+
+  // Publish avocado results using xunit plug-in.
+  step([$class: 'XUnitBuilder',
+      thresholds: [[$class: 'FailedThreshold', unstableThreshold: '0']],
+      tools: [[$class: 'JUnitType', pattern: '**/**/results.xml']]])
+
+}
+
+def emailNotification() {
+
+      env.WORKSPACE = pwd()
+      def link = "Link to artifact: ${env.BUILD_URL}artifact/${env.JOB_NAME}-${env.BUILD_NUMBER}-avocado-job-results.tar.gz"
+      def report = readFile "${env.WORKSPACE}/report.log"
+      def package_info = readFile "${env.WORKSPACE}/package_info.log"
+      def subject = "Job '${env.JOB_NAME}' run #${env.BUILD_NUMBER} finished with result: $currentBuild.currentResult"
+      def body = "${package_info}"+"\n"+"${report}"+"\n"+"${link}"
+
+
+      emailext (
+        subject: subject,
+        body: body,
+        recipientProviders: [[$class: 'RequesterRecipientProvider']]
+      )
+}
+
+def emailFailNotification() {
+
+      env.WORKSPACE = pwd()
+      def fail_message = "Job $env.JOB_NAME build #$env.BUILD_NUMBER failed due to Beaker provisioning, Avocado install or package install issues.\nResults: ${env.BUILD_URL}console\nBuild info: ${env.BUILD_URL}"
+      def subject = "Job '${env.JOB_NAME}' run #${env.BUILD_NUMBER} finished with result: $currentBuild.currentResult"
+      def body = "${fail_message}"
+
+
+      emailext (
+        subject: subject,
+        body: body,
+        recipientProviders: [[$class: 'RequesterRecipientProvider']]
+      )
+}
