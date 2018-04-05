@@ -86,7 +86,7 @@ pipeline {
             # Install latest QEMU from upstream
             echo "### Installing QEMU from the upstream tree ###"
             ssh $SSH_OPTIONS \
-            root@$CENTOS_NODE "git clone git://git.qemu-project.org/qemu.git && cd qemu && git submodule init && git submodule update --recursive && ./configure && make"
+            root@$CENTOS_NODE "git clone git://git.qemu-project.org/qemu.git && cd qemu && git submodule init && git submodule update --recursive && ./configure --target-list=x86_64-softmmu --disable-strip && make -j4 && make install"
             '''
             }
           }
@@ -100,9 +100,9 @@ pipeline {
             # Install either a released version or from source.
             if [ "${AVOCADO_VERSION}" != "master" ]; then
               ssh $SSH_OPTIONS \
-              root@$CENTOS_NODE "curl -s -o /etc/yum.repos.d/avocado-el.repo http://avocado-project.org/data/repos/avocado-el.repo"
+              root@$CENTOS_NODE 'curl -s -o /etc/yum.repos.d/avocado-el.repo http://avocado-project.org/data/repos/avocado-el.repo'
               ssh $SSH_OPTIONS \
-              root@$CENTOS_NODE "yum install -y python-avocado-${AVOCADO_VERSION} avocado-plugins-vt-${AVOCADO_VERSION} python-avocado-plugins-loader-yaml-${AVOCADO_VERSION}"
+              root@$CENTOS_NODE "yum install -y --setopt=obsoletes=0 python-avocado-${AVOCADO_VERSION} avocado-plugins-vt-${AVOCADO_VERSION} python-avocado-plugins-loader-yaml-${AVOCADO_VERSION}"
             else
               ssh $SSH_OPTIONS root@$CENTOS_NODE "/root/resources/avocado/scripts/install_from_source.sh"
             fi
