@@ -1,0 +1,33 @@
+TEST_DIR: /tmp/
+
+format: !mux
+    raw:
+        img_format: raw
+    bochs:
+        img_format: bochs
+    cloop:
+        img_format: cloop
+    parallels:
+        img_format: parallels
+    qcow:
+        img_format: qcow
+    qcow2:
+        img_format: qcow2
+    luks:
+        img_format: luks
+    qed:
+        img_format: qed
+    vdi:
+        img_format: vdi
+    vmdk:
+        img_format: vmdk
+    vpc:
+        img_format: vpc
+    vhdx:
+        img_format: vhdx
+
+protocol: !mux
+    file:
+        img_protocol: file
+#    nbd:
+#        img_protocol: nbd

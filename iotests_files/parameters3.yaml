@@ -1,0 +1,50 @@
+format: !mux
+    raw:
+        img_format: raw
+    bochs:
+        img_format: bochs
+    cloop:
+        img_format: cloop
+    parallels:
+        img_format: parallels
+    qcow:
+        img_format: qcow
+    qcow2:
+        img_format: qcow2
+    luks:
+        img_format: luks
+    qed:
+        img_format: qed
+    vdi:
+        img_format: vdi
+    vmdk:
+        img_format: vmdk
+    vpc:
+        img_format: vpc
+    vhdx:
+        img_format: vhdx
+
+protocol: !mux
+    file:
+        img_protocol: file
+    nbd:
+        img_protocol: nbd
+
+cache: !mux
+    none:
+        cache_mode: 'none'
+    writeback:
+        cache_mode: writeback
+    writethrough:
+        cache_mode: writethrough
+    directsync:
+        cache_mode: directsync
+    unsafe:
+        cache_mode: unsafe
+
+misalign: !mux
+    enabled:
+        misalign: 'true'
+    disabled:
+        misalign: 'false'
+

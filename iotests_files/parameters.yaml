@@ -1,0 +1,67 @@
+SOCKET_SCM_HELPER: "/home/jenkins/workspace/avocado_iotests/qemu/tests/qemu-iotests/socket_scm_helper"
+QEMU_PROG: "/home/jenkins/workspace/avocado_iotests/qemu/x86_64-softmmu/qemu-system-x86_64"
+QEMU_IMG_PROG: "/home/jenkins/workspace/avocado_iotests/qemu/qemu-img"
+QEMU_IO_PROG: "/home/jenkins/workspace/avocado_iotests/qemu/qemu-io"
+QEMU_NBD_PROG: "/home/jenkins/workspace/avocado_iotests/qemu/qemu-nbd"
+TEST_DIR: "/tmp/"
+OUTPUT_DIR: "/home/jenkins/workspace/avocado_iotests/qemu/tests/qemu-iotests"
+SAMPLE_IMG_DIR: "/home/jenkins/workspace/avocado_iotests/qemu/tests/qemu-iotests/sample_images"
+QEMU_OPTIONS: "-nodefaults -machine accel=qtest"
+QEMU_DEFAULT_MACHINE: pc
+CACHEMODE: writeback
+IMGFMT_GENERIC: "true"
+IMGOPTS: ""
+IMGKEYSECRET: ""
+IMGOPTSSYNTAX: "false" 
+QEMU_IO_OPTIONS_NO_FMT: " --cache writeback"
+PYTHON: "python -B"
+format: !mux
+    raw:
+        QEMU_IO_OPTIONS: " --cache writeback -f raw"
+        IMGFMT: raw
+    bochs:
+        QEMU_IO_OPTIONS: " --cache writeback -f bochs"
+        IMGFMT: bochs
+        IMGFMT_GENERIC: "false"
+    cloop:
+        QEMU_IO_OPTIONS: " --cache writeback -f cloop"
+        IMGFMT: cloop
+        IMGFMT_GENERIC: "false"
+    parallels:
+        QEMU_IO_OPTIONS: " --cache writeback -f parallels"
+        IMGFMT: parallels
+        IMGFMT_GENERIC: "false"
+    qcow:
+        QEMU_IO_OPTIONS: " --cache writeback -f qcow"
+        IMGFMT: qcow
+    qcow2:
+        QEMU_IO_OPTIONS: " --cache writeback -f qcow2"
+        IMGFMT: qcow2
+        IMGOPTS: "compat=1.1"
+    luks:
+        IMGFMT: luks
+        IMGKEYSECRET: 123456
+        IMGOPTS: "iter-time=10"
+        QEMU_IO_OPTIONS: " --cache writeback"
+        IMGOPTSSYNTAX: "true" 
+    qed:
+        QEMU_IO_OPTIONS: " --cache writeback -f qed"
+        IMGFMT: qed
+    vdi:
+        QEMU_IO_OPTIONS: " --cache writeback -f vdi"
+        IMGFMT: vdi
+    vmdk:
+        QEMU_IO_OPTIONS: " --cache writeback -f vmdk"
+        IMGFMT: vmdk
+    vpc:
+        QEMU_IO_OPTIONS: " --cache writeback -f vpc"
+        IMGFMT: vpc
+    vhdx:
+        QEMU_IO_OPTIONS: " --cache writeback -f vhdx"
+        IMGFMT: vhdx
+
+protocol: !mux
+    file:
+        IMGPROTO: file
+    nbd:
+        IMGPROTO: nbd
