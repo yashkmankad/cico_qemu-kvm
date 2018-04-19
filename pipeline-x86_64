@@ -71,22 +71,29 @@ pipeline {
             sh '''
             #!/bin/bash
             source "$WORKSPACE/RESOURCES.txt"
+
             # Install all the QEMU dependencies and other packages
             echo "### Installing all the QEMU dependencies ###"
             ssh $SSH_OPTIONS \
             root@$CENTOS_NODE "yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
             ssh $SSH_OPTIONS \
             root@$CENTOS_NODE "yum -y install wget curl python-pip PyYAML tcpdump python-requests \
-                              libvirt-python python-sphinx libvirt-devel gstreamer-python gdb gdb-gdbserver \
-                              python-imaging bridge-utils git python-devel cryptsetup gcc gcc-c++ libvirt* \
-                              p7zip python2-simplejson policycoreutils-python attr genisoimage mkisofs \
-                              glibc-devel glib2-devel sg3_utils hdparm net-tools automake autoconf pkgconfig \
-                              make SDL-devel libtool texinfo zlib zlib-devel openssl-devel ntpdate pixman \
-                              pixman-devel flex bison"
+                               python-sphinx gstreamer-python gdb gdb-gdbserver python-imaging \
+                               bridge-utils git python-devel cryptsetup gcc gcc-c++ p7zip python2-simplejson \
+                               policycoreutils-python attr genisoimage mkisofs glibc-devel glib2-devel \
+                               sg3_utils hdparm net-tools automake autoconf pkgconfig make SDL-devel \
+                               libtool texinfo zlib zlib-devel openssl-devel ntpdate pixman \
+                               pixman-devel flex bison --exclude qemu-kvm* --exclude qemu-img*"
+
+
             # Install latest QEMU from upstream
             echo "### Installing QEMU from the upstream tree ###"
             ssh $SSH_OPTIONS \
             root@$CENTOS_NODE "git clone git://git.qemu-project.org/qemu.git && cd qemu && git submodule init && git submodule update --recursive && ./configure --target-list=x86_64-softmmu --disable-strip && make -j4 && make install"
+
+            # Install libvirt and dependencies
+            ssh $SSH_OPTIONS \
+            root@$CENTOS_NODE "yum -y install libvirt-python libvirt-devel libvirt qemu-kvm qemu-img"
             '''
             }
           }
