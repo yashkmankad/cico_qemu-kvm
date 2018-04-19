@@ -144,6 +144,31 @@ pipeline {
       }
     }
 
+    stage('Run KVM Unit tests') {
+      steps {
+          wrap([$class: 'TimestamperBuildWrapper']) {
+            sh '''
+            #!/bin/bash
+            source "$WORKSPACE/RESOURCES.txt"
+            echo "### Running KVM Unit tests ###"
+            ssh $SSH_OPTIONS \
+            root@$CENTOS_NODE "curl https://raw.githubusercontent.com/avocado-framework/avocado/master/contrib/testsuites/run-kvm-unit-test.sh > run-kvm-unit-test.sh; chmod +x run-kvm-unit-test.sh; ./run-kvm-unit-test.sh"
+            '''
+          }
+      }
+
+      post {
+        // archive everything related to avocado run and notify over email if "Unattended install" failed
+        failure {
+          script {
+            archiveAvocadoResults()
+            emailNotification()
+          }
+        }
+      }
+    }
+
+
     stage('Unattended install by Avocado-VT') {
       steps {
           wrap([$class: 'TimestamperBuildWrapper']) {
