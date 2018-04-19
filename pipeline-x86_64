@@ -123,6 +123,13 @@ pipeline {
           #!/bin/bash
           source "$WORKSPACE/RESOURCES.txt"
           cat $WORKSPACE/RESOURCES.txt
+
+          echo "### Update Avocado conf to use qemu binary installed from source ###"
+          ssh $SSH_OPTIONS \
+          root@$CENTOS_NODE "echo \"[vt.qemu]\" >> /etc/avocado/avocado.conf"
+          ssh $SSH_OPTIONS \
+          root@$CENTOS_NODE "echo \"qemu_bin = /root/qemu/qemu/x86_64-softmmu/qemu-system-x86_64\" >> /etc/avocado/avocado.conf"
+
           echo "### Bootstrapping Avocado-VT ###"
           ssh $SSH_OPTIONS \
           root@$CENTOS_NODE "avocado vt-bootstrap --vt-type qemu --yes-to-all --vt-skip-verify-download-assets"
