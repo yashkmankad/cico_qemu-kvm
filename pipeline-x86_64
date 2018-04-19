@@ -125,7 +125,9 @@ pipeline {
           cat $WORKSPACE/RESOURCES.txt
           echo "### Bootstrapping Avocado-VT ###"
           ssh $SSH_OPTIONS \
-          root@$CENTOS_NODE "avocado vt-bootstrap --vt-type qemu --yes-to-all"
+          root@$CENTOS_NODE "avocado vt-bootstrap --vt-type qemu --yes-to-all --vt-skip-verify-download-assets"
+
+          echo "### Start libvirtd ###"
           ssh $SSH_OPTIONS \
           root@$CENTOS_NODE "systemctl start libvirtd"
           (echo "Hostname: $CENTOS_NODE";echo "Arch: $MACHINE_ARCH";echo "Avocado Version: $AVOCADO_VERSION") | tee -a "$WORKSPACE/package_info.log"
