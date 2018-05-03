@@ -1,0 +1,76 @@
+################################
+# Unset environment variables  #
+################################
+
+unset $CENTOS_NODE
+unset $SSID
+
+
+#########################
+# Get system from Duffy #
+#########################
+
+source /home/qemu-kvm/SET_DUFFY_KEY
+cico node get --arch x86_64 --release 7 --count 1
+CENTOS_NODE=$(cico inventory -c hostname -f value)
+echo $CENTOS_NODE
+SSID=$(cico inventory -c comment -f value)
+echo $SSID
+
+
+###################
+# Prepare System  #
+###################
+
+SSH_OPTIONS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+
+ssh $SSH_OPTIONS root@$CENTOS_NODE "yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm; \
+                                    curl -s -o /etc/yum.repos.d/avocado-el.repo http://avocado-project.org/data/repos/avocado-el.repo"
+
+ssh $SSH_OPTIONS root@$CENTOS_NODE "yum install -y --setopt=obsoletes=0 python-avocado-59.0 git make \
+                                    zlib zlib-devel glibc-devel glib2-devel gdb gdb-gdbserver python-devel \
+                                    gcc gcc-c++ cryptsetup autoconf pkgconfig libtool texinfo openssl-devel \
+                                    ntpdate pixman pixman-devel flex bison libgcrypt-devel bzip2 \
+                                    python-avocado-plugins-loader-yaml-59.0"
+
+ssh $SSH_OPTIONS root@$CENTOS_NODE "useradd jenkins; \
+                                    mkdir /home/jenkins/.ssh/; \
+                                    cp /root/.ssh/authorized_keys /home/jenkins/.ssh/; \
+                                    chown jenkins:jenkins -R /home/jenkins/.ssh"
+
+
+################
+# Install QEMU #
+################
+
+# git clone from source
+ssh $SSH_OPTIONS jenkins@$CENTOS_NODE "git clone git://git.qemu.org/qemu.git; cd qemu; \
+                                       git log -1 --abbrev-commit --pretty=oneline; \
+                                       git submodule update --init dtc; \
+                                       ./configure --target-list=x86_64-softmmu; make -j4"
+
+
+####################
+# Run the iotests  #
+####################
+
+# git clone directory that has files required for avocado run
+ssh $SSH_OPTIONS jenkins@$CENTOS_NODE "git clone https://github.com/yashkmankad/cico_qemu-kvm.git; \
+                                       ls -lrt; ls -lrt cico_qemu-kvm"
+
+# Create TEST_LIST and run Avocado (using heredoc to avoid getting lost with the escapes)
+ssh -T $SSH_OPTIONS jenkins@$CENTOS_NODE << 'EOF'
+cd qemu/tests/qemu-iotests/
+TEST_LIST=$(ls | egrep "^[0-9]+$")
+TEST_LIST=${TEST_LIST//$'\n'/ }
+avocado --config /home/jenkins/cico_qemu-kvm/iotests_files/avocado.conf \
+        run -m /home/jenkins/cico_qemu-kvm/iotests_files/parameters2.yaml \
+        --external-runner  /home/jenkins/cico_qemu-kvm/iotests_files/run_test.sh \
+        --job-results-dir /home/jenkins/cico_qemu-kvm/iotests_files/ -- $TEST_LIST
+EOF
+
+######################
+# Return the system  #
+######################
+
+cico node done $SSID
