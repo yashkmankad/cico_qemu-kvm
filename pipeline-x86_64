@@ -33,7 +33,8 @@ pipeline {
               touch $WORKSPACE/RESOURCES.txt
 
               # get node from duffy
-              export CICO_API_KEY=$(cat /home/qemu-kvm/duffy.key); cico node get --arch x86_64 --release 7 --count 1
+              source /home/qemu-kvm/SET_DUFFY_KEY 
+              cico node get --arch x86_64 --release 7 --count 1
               CENTOS_NODE=$(cico inventory -c hostname -f value)
               echo $CENTOS_NODE
               SSID=$(cico inventory -c comment -f value)

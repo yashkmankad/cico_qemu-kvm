@@ -32,8 +32,16 @@ pipeline {
               rm -f $WORKSPACE/RESOURCES.txt
               touch $WORKSPACE/RESOURCES.txt
 
+              # create virtualenv to upgrade python-cicoclient
+
+              virtualenv multiarch/
+              source multiarch/bin/activate
+              pip install pip --upgrade
+              pip install python-cicoclient
+
               # get node from duffy
-              export CICO_API_KEY=$(cat /home/qemu-kvm/duffy.key); cico node get --arch ppc64le --release 7 --count 1
+              source /home/qemu-kvm/SET_DUFFY_KEY 
+              cico node get --arch ppc64le --release 7 --count 1
               CENTOS_NODE=$(cico inventory -c hostname -f value)
               echo $CENTOS_NODE
               SSID=$(cico inventory -c comment -f value)
